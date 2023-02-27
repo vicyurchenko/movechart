@@ -6,23 +6,16 @@ module.exports = {
   output: {
     filename: 'chartjs-plugin-move-chart.js',
     path: path.resolve(__dirname, 'dist'),
-    library: 'MoveChart',
-    libraryTarget: 'umd',
+    library: 'moveChart',
+    libraryExport: 'default',
+    libraryTarget: 'umd', // формат сборки для использования в разных средах (CommonJS, AMD, Browser Global)
     umdNamedDefine: true,
-  },
-  externals: {
-    'chart.js': {
-      commonjs: 'chart.js',
-      commonjs2: 'chart.js',
-      amd: 'chart.js',
-      root: 'Chart',
-    },
   },
   module: {
     rules: [
       {
         test: /\.js$/,
-        exclude: /(node_modules)/,
+        exclude: /node_modules/,
         use: {
           loader: 'babel-loader',
           options: {
@@ -31,5 +24,13 @@ module.exports = {
         },
       },
     ],
+  },
+  externals: {
+    chartjs: {
+      commonjs: 'chart.js',
+      commonjs2: 'chart.js',
+      amd: 'chart.js',
+      root: 'Chart',
+    },
   },
 };

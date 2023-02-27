@@ -1,44 +1,60 @@
 class ScrollChart {
-  constructor(chart) {
+  static defaultOptions = {
+    btnRadius: 15,
+    angle: Math.PI / 180,
+    borderClr: '#eeeeee',
+    arrowClr: '#1c5e7d',
+  };
+
+  constructor(chart, options = {}) {
     this.chart = chart;
+    this.options = { ...ScrollChart.defaultOptions, ...options };
   }
 
-  draw(pixel, isRight = false) {
-    const {ctx, chartArea : { left, right, top, height }} = this.chart;
-
+  drawBtn(isRight = false) {
+    const {
+      ctx,
+      chartArea: { left, right, top, height },
+    } = this.chart;
+    const { btnRadius, angle, borderClr, arrowClr } = this.options;
     const side = isRight ? right : left;
-    const angle = Math.PI / 180;
-
+    const pixel = btnRadius / (isRight ? -3 : 3);
     ctx.beginPath();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#f7f7f7';
+    ctx.strokeStyle = borderClr;
     ctx.fillStyle = 'white';
-    ctx.arc(side, height / 2 + top, 15, angle * 0, angle * 360, false);
+    ctx.arc(
+      side,
+      height / 2 + top,
+      btnRadius,
+      angle * 0,
+      angle * 360,
+      false
+    );
     ctx.stroke();
     ctx.fill();
     ctx.closePath();
-
     ctx.beginPath();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#1c5e7d';
-    ctx.moveTo(side + pixel, height / 2 + top - 7.5);
+    ctx.lineWidth = btnRadius / 5;
+    ctx.strokeStyle = arrowClr;
+    ctx.moveTo(side + pixel, height / 2 + top - btnRadius / 2);
     ctx.lineTo(side - pixel, height / 2 + top);
-    ctx.lineTo(side + pixel, height / 2 + top + 7.5);
+    ctx.lineTo(side + pixel, height / 2 + top + btnRadius / 2);
     ctx.stroke();
     ctx.closePath();
   }
 
   getHoveredButton(x, y) {
-    const { chartArea : { left, right, top, height } } = this.chart;
-
-    const buttonTop = height / 2 + top - 15;
-    const buttonBottom = height / 2 + top + 15;
-
+    const {
+      chartArea: { left, right, top, height },
+    } = this.chart;
+    const { btnRadius } = this.options;
+    const buttonTop = height / 2 + top - btnRadius;
+    const buttonBottom = height / 2 + top + btnRadius;
     if (y >= buttonTop && y <= buttonBottom) {
-      if (x >= right - 15 && x <= right + 15) {
+      if (x >= right - btnRadius && x <= right + btnRadius) {
         return 1;
       }
-      if (x >= left - 15 && x <= left + 15) {
+      if (x >= left - btnRadius && x <= left + btnRadius) {
         return -1;
       }
     }
@@ -47,14 +63,15 @@ class ScrollChart {
 
   scroll(x, y) {
     const delta = this.getHoveredButton(x, y);
-    const { config } = this.chart;
-    const { options: { scales } } = config;
+    const {
+      config: { data, options },
+    } = this.chart;
+    const { scales } = options;
     const { x: xAxis } = scales;
     const numVisibleLabels = xAxis.max - xAxis.min;
-
     if (delta > 0) {
-      if (xAxis.max >= config.data.labels.length - 1) {
-        xAxis.max = config.data.labels.length - 1;
+      if (xAxis.max >= data.labels.length - 1) {
+        xAxis.max = data.labels.length - 1;
         xAxis.min = Math.max(xAxis.max - numVisibleLabels, 0);
       } else {
         xAxis.min += 1;
@@ -69,48 +86,57 @@ class ScrollChart {
         xAxis.max -= 1;
       }
     }
+    this.setCursorStyle(x, y);
     this.chart.update();
   }
 
-  setCoursorStyle({ x, y }) {
-    const isHovering = this.getHoveredButton(x, y) !== 0;
-    this.chart.canvas.style.cursor = isHovering ? 'pointer' : 'default';
+  setCursorStyle(x, y) {
+    const hoveredBtn = this.getHoveredButton(x, y);
+    const isRightBtn = hoveredBtn === 1;
+    const isHovering = hoveredBtn !== 0;
+    const { config } = this.chart;
+    const { options: { scales } } = config;
+    const { x: xAxis } = scales;
+
+    let style = isHovering ? 'pointer' : 'default';
+    if (isHovering && (isRightBtn && xAxis.max >= config.data.labels.length - 1
+      || !isRightBtn && xAxis.min <= 0)) {
+      style = 'not-allowed';
+    }
+    this.chart.canvas.style.cursor = style;
   }
 }
 
 const moveChart = {
   id: 'moveChart',
   scrollChart: null,
-
-  afterInit: function(chart) {
-    const { canvas } = chart;
-    this.scrollChart = new ScrollChart(chart);
-    canvas?.addEventListener('click', (event) => {
+  afterInit: function(chart, args, options) {
+    this.scrollChart = new ScrollChart(chart, options);
+    const canvas = chart.canvas;
+    canvas.addEventListener('click', (event) => {
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       this.scrollChart.scroll(x, y);
     });
-    canvas?.addEventListener('mouseenter', () => {
-      canvas.addEventListener('mousemove', this.mousemoveHandler.bind(this));
-    });
-    canvas?.addEventListener('mouseleave', () => {
-      canvas.removeEventListener('mousemove', this.mousemoveHandler.bind(this));
-    });
+    canvas.addEventListener('mousemove', (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      this.scrollChart.setCursorStyle(x, y);
+    })
   },
-
-  mousemoveHandler: function(event) {
-    this.scrollChart.setCoursorStyle(event);
-  },
-
   afterDraw: function(chart) {
-    if (!this.scrollChart) {
-      const scrollChart = new ScrollChart(chart);
-      this.scrollChart = scrollChart;
+    if (this.scrollChart) {
+      this.scrollChart.drawBtn();
+      this.scrollChart.drawBtn(true);
     }
-    this.scrollChart.draw(5);
-    this.scrollChart.draw(-5, true);
   },
+  defaults: {
+    btnRadius: 15,
+    BorderClr: '#eeeeee',
+    ArrowClr: '#1c5e7d',
+  }
 };
 
 export default moveChart;
